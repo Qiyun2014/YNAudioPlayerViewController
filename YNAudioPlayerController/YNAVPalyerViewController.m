@@ -285,6 +285,64 @@
 }
 
 
+- (CVPixelBufferRef)pixelBufferFromCGImageWithPool:(CVPixelBufferPoolRef)pixelBufferPool sourceImage:(CGImageRef)sourceImage
+{
+    
+    CVPixelBufferRef pxbuffer = NULL;
+    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
+                             [NSNumber numberWithBool:YES], kCVPixelBufferCGImageCompatibilityKey,
+                             [NSNumber numberWithBool:YES], kCVPixelBufferCGBitmapContextCompatibilityKey,
+                             nil];
+    
+    size_t width =  CGImageGetWidth(sourceImage);
+    size_t height = CGImageGetHeight(sourceImage);
+    size_t bytesPerRow = CGImageGetBytesPerRow(sourceImage);
+    size_t bitsPerComponent = CGImageGetBitsPerComponent(sourceImage);
+    CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(sourceImage);
+    void *pxdata = NULL;
+    
+    if (pixelBufferPool == NULL)
+        NSLog(@"pixelBufferPool is null!");
+    
+    CVReturn status = CVPixelBufferPoolCreatePixelBuffer (NULL, pixelBufferPool, &pxbuffer);
+    if (pxbuffer == NULL) {
+        status = CVPixelBufferCreate(kCFAllocatorDefault, width,
+                                     height, kCVPixelFormatType_32ARGB, (__bridge CFDictionaryRef) options,
+                                     &pxbuffer);
+    }
+    
+    NSParameterAssert(status == kCVReturnSuccess && pxbuffer != NULL);
+    CVPixelBufferLockBaseAddress(pxbuffer, 0);
+    pxdata = CVPixelBufferGetBaseAddress(pxbuffer);
+    
+    NSParameterAssert(pxdata != NULL);
+    
+    if(/* DISABLES CODE */ (1)){
+        
+        CGColorSpaceRef rgbColorSpace = CGColorSpaceCreateDeviceRGB();
+        CGContextRef context = CGBitmapContextCreate(pxdata, width,
+                                                     height,bitsPerComponent,bytesPerRow, rgbColorSpace,
+                                                     bitmapInfo);
+        NSParameterAssert(context);
+        CGContextConcatCTM(context, CGAffineTransformMakeRotation(0));
+        CGContextDrawImage(context, CGRectMake(0, 0, width,height), sourceImage);
+        CGColorSpaceRelease(rgbColorSpace);
+        CGContextRelease(context);
+    }else{
+        
+        
+        CFDataRef  dataFromImageDataProvider = CGDataProviderCopyData(CGImageGetDataProvider(sourceImage));
+        CFIndex length = CFDataGetLength(dataFromImageDataProvider);
+        GLubyte  *imageData = (GLubyte *)CFDataGetBytePtr(dataFromImageDataProvider);
+        memcpy(pxdata,imageData,length);
+        
+        CFRelease(dataFromImageDataProvider);
+    }
+    
+    return pxbuffer;
+}
+
+
 - (void)writeImages:(NSArray *)imagesArray ToMovieAtPath:(NSString *)path withSize:(CGSize) size
           inDuration:(float)duration byFPS:(int32_t)fps{
     
@@ -439,9 +497,22 @@
                 else
                     CFRelease(buffer);
             }
-            
         }
     }];
+}
+
+/* Writing video and audio via AVAssetWriter */
+- (void)writingVideoOfAssetWriter{
+    
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL URLWithString:@"file://user/local"] options:nil];
+
+    AVMutableMetadataItem *newItem = [[AVMutableMetadataItem alloc] init];
+    newItem.identifier = AVMetadataIdentifierQuickTimeMetadataLocationISO6709;
+    newItem.dataType = AVMetadataIdentifierQuickTimeMetadataLocationISO6709;
+    newItem.duration = asset.duration;
+    newItem.value = @"location:湖北武汉";
+    
+    
 }
 
 @end
